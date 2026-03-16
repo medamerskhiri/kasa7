@@ -107,13 +107,19 @@ const badWords = [
   "suck ma dick",
   "mibon",
   "wabna",
+  "wapna",
   "wbna",
+  "wpna",
   "ميبون",
   "مبن",
   "ميبن",
   "مبون",
   "وبن",
   "miboun",
+  "mipoun",
+  "mipon",
+  "y3aseb",
+  "3asabet",
   "termtek",
   "ترم",
   "termtec",
@@ -235,9 +241,9 @@ client.on("messageCreate", (message) => {
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
     const roomName = parseRoomName(message.content);
 
-    if (!mentionedUser || !typeMatch || !roomName) {
+    if (!mentionedUser || !typeMatch) {
       message.reply(
-        "usage: `!sakket @user vr room name` or `!sakket @user chat room name`"
+        "usage: `!sakket @user vr` or `!sakket @user chat room name`"
       );
       return;
     }
@@ -245,25 +251,25 @@ client.on("messageCreate", (message) => {
     const type = typeMatch[1].toLowerCase();
 
     if (type === "vr") {
-      const voiceChannel = message.guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
-      );
-      if (!voiceChannel) {
-        message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
+      // ✅ use setMute for instant mute without rejoin
+      if (!mentionedUser.voice.channel) {
+        message.reply(`${mentionedUser} mach fi vr !`);
         return;
       }
-      voiceChannel.permissionOverwrites
-        .edit(mentionedUser, { Speak: false })
+      mentionedUser.voice
+        .setMute(true)
         .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
-          );
+          message.reply(`✅ ${mentionedUser} saket 🔇`);
         })
         .catch((err) => {
           console.error(err);
           message.reply("manajjamtech nsakktou , check bot permissions .");
         });
     } else if (type === "chat") {
+      if (!roomName) {
+        message.reply("usage: `!sakket @user chat room name`");
+        return;
+      }
       const textChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
       );
@@ -303,9 +309,9 @@ client.on("messageCreate", (message) => {
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
     const roomName = parseRoomName(message.content);
 
-    if (!mentionedUser || !typeMatch || !roomName) {
+    if (!mentionedUser || !typeMatch) {
       message.reply(
-        "usage: `!na77i_mute @user vr room name` or `!na77i_mute @user chat room name`"
+        "usage: `!na77i_mute @user vr` or `!na77i_mute @user chat room name`"
       );
       return;
     }
@@ -313,25 +319,25 @@ client.on("messageCreate", (message) => {
     const type = typeMatch[1].toLowerCase();
 
     if (type === "vr") {
-      const voiceChannel = message.guild.channels.cache.find(
-        (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
-      );
-      if (!voiceChannel) {
-        message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
+      // ✅ use setMute for instant unmute without rejoin
+      if (!mentionedUser.voice.channel) {
+        message.reply(`${mentionedUser} mach fi vr !`);
         return;
       }
-      voiceChannel.permissionOverwrites
-        .edit(mentionedUser, { Speak: true })
+      mentionedUser.voice
+        .setMute(false)
         .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} tna77alou lmute fi **${voiceChannel.name}** 🔊`
-          );
+          message.reply(`✅ ${mentionedUser} tna77alou lmute 🔊`);
         })
         .catch((err) => {
           console.error(err);
           message.reply("manajjamtech enna7i mute , check bot permissions .");
         });
     } else if (type === "chat") {
+      if (!roomName) {
+        message.reply("usage: `!na77i_mute @user chat room name`");
+        return;
+      }
       const textChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
       );
