@@ -132,6 +132,8 @@ const badWords = [
   "terma",
   "ba3bes",
   "بعبس",
+  "kos",
+  "كس",
   "بعباس",
   "بعبص",
   "بعباص",
@@ -181,7 +183,7 @@ function isBadMessage(content, userId) {
   );
 }
 
-client.on("messageCreate", (message) => {
+client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
@@ -260,16 +262,17 @@ client.on("messageCreate", (message) => {
         message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
         return;
       }
-      if (!mentionedUser.voice.channel) {
+      const freshMember = await message.guild.members.fetch(mentionedUser.id);
+      if (!freshMember.voice.channel) {
         message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
-      const currentChannel = mentionedUser.voice.channel;
+      const currentChannel = freshMember.voice.channel;
       voiceChannel.permissionOverwrites
-        .edit(mentionedUser, { Speak: false })
-        .then(() => mentionedUser.voice.setChannel(null))
+        .edit(freshMember, { Speak: false })
+        .then(() => freshMember.voice.setChannel(null))
         .then(() => delay(1000))
-        .then(() => mentionedUser.voice.setChannel(currentChannel))
+        .then(() => freshMember.voice.setChannel(currentChannel))
         .then(() => {
           message.reply(
             `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
@@ -336,16 +339,17 @@ client.on("messageCreate", (message) => {
         message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
         return;
       }
-      if (!mentionedUser.voice.channel) {
+      const freshMember = await message.guild.members.fetch(mentionedUser.id);
+      if (!freshMember.voice.channel) {
         message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
-      const currentChannel = mentionedUser.voice.channel;
+      const currentChannel = freshMember.voice.channel;
       voiceChannel.permissionOverwrites
-        .edit(mentionedUser, { Speak: true })
-        .then(() => mentionedUser.voice.setChannel(null))
+        .edit(freshMember, { Speak: true })
+        .then(() => freshMember.voice.setChannel(null))
         .then(() => delay(1000))
-        .then(() => mentionedUser.voice.setChannel(currentChannel))
+        .then(() => freshMember.voice.setChannel(currentChannel))
         .then(() => {
           message.reply(
             `✅ ${mentionedUser} tna77alou lmute fi **${voiceChannel.name}** 🔊`
