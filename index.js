@@ -27,6 +27,14 @@ function parseRoomName(messageContent) {
   return null;
 }
 
+function getForwardedContent(message) {
+  return message.messageSnapshots
+    ? [...message.messageSnapshots.values()]
+        .map((s) => s.content?.toLowerCase() || "")
+        .join(" ")
+    : "";
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const cooldowns = new Map();
@@ -159,18 +167,13 @@ function getRecentMessages(userId, newMessage) {
     userMessageHistory.set(userId, []);
   }
   const history = userMessageHistory.get(userId);
-
-  // ✅ combine normal content + forwarded content
-  const forwardedContent =
-    newMessage.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const forwardedContent = getForwardedContent(newMessage);
   const fullContent = newMessage.content.toLowerCase() + " " + forwardedContent;
-
   history.push({
     message: newMessage,
     content: fullContent,
     time: now,
   });
-
   const recent = history.filter((m) => now - m.time < HISTORY_WINDOW);
   userMessageHistory.set(userId, recent);
   return recent;
@@ -194,8 +197,7 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
-  const forwardedContent =
-    message.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const forwardedContent = getForwardedContent(message);
   const allContent = content + " " + forwardedContent;
 
   const recentMessages = getRecentMessages(message.author.id, message);
@@ -279,20 +281,20 @@ client.on("messageCreate", async (message) => {
         return;
       }
       const currentChannel = freshMember.voice.channel;
-      voiceChannel.permissionOverwrites
-        .edit(freshMember, { Speak: false })
-        .then(() => freshMember.voice.setChannel(null))
-        .then(() => delay(1000))
-        .then(() => freshMember.voice.setChannel(currentChannel))
-        .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
-          );
-        })
-        .catch((err) => {
-          console.error(err);
-          message.reply("manajjamtech nsakktou , check bot permissions .");
+      try {
+        await voiceChannel.permissionOverwrites.edit(freshMember, {
+          Speak: false,
         });
+        await freshMember.voice.setChannel(null);
+        await delay(1500);
+        await freshMember.voice.setChannel(currentChannel);
+        message.reply(
+          `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
+        );
+      } catch (err) {
+        console.error(err);
+        message.reply("manajjamtech nsakktou , check bot permissions .");
+      }
     } else if (type === "chat") {
       const textChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
@@ -301,17 +303,17 @@ client.on("messageCreate", async (message) => {
         message.reply(`ma l9ithach echat room li esmha "**${roomName}**"`);
         return;
       }
-      textChannel.permissionOverwrites
-        .edit(mentionedUser, { SendMessages: false })
-        .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} saket fi **${textChannel.name}** 🔇`
-          );
-        })
-        .catch((err) => {
-          console.error(err);
-          message.reply("manajjamtech nsakktou , check bot permissions .");
+      try {
+        await textChannel.permissionOverwrites.edit(mentionedUser, {
+          SendMessages: false,
         });
+        message.reply(
+          `✅ ${mentionedUser} saket fi **${textChannel.name}** 🔇`
+        );
+      } catch (err) {
+        console.error(err);
+        message.reply("manajjamtech nsakktou , check bot permissions .");
+      }
     }
     return;
   }
@@ -356,20 +358,20 @@ client.on("messageCreate", async (message) => {
         return;
       }
       const currentChannel = freshMember.voice.channel;
-      voiceChannel.permissionOverwrites
-        .edit(freshMember, { Speak: true })
-        .then(() => freshMember.voice.setChannel(null))
-        .then(() => delay(1000))
-        .then(() => freshMember.voice.setChannel(currentChannel))
-        .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} tna77alou lmute fi **${voiceChannel.name}** 🔊`
-          );
-        })
-        .catch((err) => {
-          console.error(err);
-          message.reply("manajjamtech enna7i mute , check bot permissions .");
+      try {
+        await voiceChannel.permissionOverwrites.edit(freshMember, {
+          Speak: true,
         });
+        await freshMember.voice.setChannel(null);
+        await delay(1500);
+        await freshMember.voice.setChannel(currentChannel);
+        message.reply(
+          `✅ ${mentionedUser} tna77alou lmute fi **${voiceChannel.name}** 🔊`
+        );
+      } catch (err) {
+        console.error(err);
+        message.reply("manajjamtech enna7i mute , check bot permissions .");
+      }
     } else if (type === "chat") {
       const textChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
@@ -378,17 +380,17 @@ client.on("messageCreate", async (message) => {
         message.reply(`ma l9ithach echat room li esmha "**${roomName}**"`);
         return;
       }
-      textChannel.permissionOverwrites
-        .edit(mentionedUser, { SendMessages: true })
-        .then(() => {
-          message.reply(
-            `✅ ${mentionedUser} tna77alou lmute fi **${textChannel.name}** 🔊`
-          );
-        })
-        .catch((err) => {
-          console.error(err);
-          message.reply("manajjamtech enna7i mute , check bot permissions .");
+      try {
+        await textChannel.permissionOverwrites.edit(mentionedUser, {
+          SendMessages: true,
         });
+        message.reply(
+          `✅ ${mentionedUser} tna77alou lmute fi **${textChannel.name}** 🔊`
+        );
+      } catch (err) {
+        console.error(err);
+        message.reply("manajjamtech enna7i mute , check bot permissions .");
+      }
     }
     return;
   }
@@ -433,8 +435,7 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
   if (!newMessage.content) return;
 
   const content = newMessage.content.toLowerCase();
-  const forwardedContent =
-    newMessage.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const forwardedContent = getForwardedContent(newMessage);
   const allContent = content + " " + forwardedContent;
   const normalized = normalize(allContent);
 
