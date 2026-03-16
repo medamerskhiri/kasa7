@@ -261,7 +261,7 @@ client.on("messageCreate", (message) => {
         return;
       }
       if (!mentionedUser.voice.channel) {
-        message.reply(`${mentionedUser} mach fi vr !`);
+        message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
       const currentChannel = mentionedUser.voice.channel;
@@ -337,7 +337,7 @@ client.on("messageCreate", (message) => {
         return;
       }
       if (!mentionedUser.voice.channel) {
-        message.reply(`${mentionedUser} mach fi vr !`);
+        message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
       const currentChannel = mentionedUser.voice.channel;
