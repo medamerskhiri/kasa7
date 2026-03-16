@@ -369,7 +369,7 @@ client.on("messageCreate", (message) => {
         message.reply(`chet7eb ${message.author} ma tkarreznich`);
       } else {
         message.reply(
-          `aa si ${message.author}, 5aterni ka7louch te7sayebini ma9mou3 h w chentaffik .`
+          `aa si ${message.author}, 5aterni ka7louch te7sayebini ma9mou3 hw chentaffik .`
         );
         message.reply(`${message.author}, barra nayek`);
       }
