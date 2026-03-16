@@ -159,11 +159,18 @@ function getRecentMessages(userId, newMessage) {
     userMessageHistory.set(userId, []);
   }
   const history = userMessageHistory.get(userId);
+
+  // ✅ combine normal content + forwarded content
+  const forwardedContent =
+    newMessage.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const fullContent = newMessage.content.toLowerCase() + " " + forwardedContent;
+
   history.push({
     message: newMessage,
-    content: newMessage.content.toLowerCase(),
+    content: fullContent,
     time: now,
   });
+
   const recent = history.filter((m) => now - m.time < HISTORY_WINDOW);
   userMessageHistory.set(userId, recent);
   return recent;
@@ -187,15 +194,13 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
-
-  // ✅ check forwarded message content too
   const forwardedContent =
     message.messageSnapshots?.first()?.content?.toLowerCase() || "";
   const allContent = content + " " + forwardedContent;
 
   const recentMessages = getRecentMessages(message.author.id, message);
 
-  // 1. bad word check (includes forwarded content)
+  // 1. bad word check
   if (isBadMessage(allContent, message.author.id)) {
     recentMessages.forEach((m) => m.message.delete().catch(() => {}));
     userMessageHistory.set(message.author.id, []);
