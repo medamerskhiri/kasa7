@@ -280,12 +280,21 @@ client.on("messageCreate", async (message) => {
         message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
+      const reloadChannel = message.guild.channels.cache.find(
+        (ch) => ch.name.toLowerCase() === "mute-reload" && ch.type === 2
+      );
+      if (!reloadChannel) {
+        message.reply(
+          `ma l9ithach channel "mute-reload" , a3melou fi server !`
+        );
+        return;
+      }
       const currentChannel = freshMember.voice.channel;
       try {
         await voiceChannel.permissionOverwrites.edit(freshMember, {
           Speak: false,
         });
-        await freshMember.voice.setChannel(null);
+        await freshMember.voice.setChannel(reloadChannel);
         await delay(1500);
         await freshMember.voice.setChannel(currentChannel);
         message.reply(
@@ -357,12 +366,21 @@ client.on("messageCreate", async (message) => {
         message.reply(`${mentionedUser} mahouch fi vr "**${roomName}**" !`);
         return;
       }
+      const reloadChannel = message.guild.channels.cache.find(
+        (ch) => ch.name.toLowerCase() === "mute-reload" && ch.type === 2
+      );
+      if (!reloadChannel) {
+        message.reply(
+          `ma l9ithach channel "mute-reload" , a3melou fi server !`
+        );
+        return;
+      }
       const currentChannel = freshMember.voice.channel;
       try {
         await voiceChannel.permissionOverwrites.edit(freshMember, {
           Speak: true,
         });
-        await freshMember.voice.setChannel(null);
+        await freshMember.voice.setChannel(reloadChannel);
         await delay(1500);
         await freshMember.voice.setChannel(currentChannel);
         message.reply(
