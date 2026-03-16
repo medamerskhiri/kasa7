@@ -27,6 +27,8 @@ function parseRoomName(messageContent) {
   return null;
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const cooldowns = new Map();
 const COOLDOWN = 30 * 1000;
 
@@ -143,6 +145,7 @@ const badWords = [
   "bezoul",
   "bezol",
 ];
+
 const emojiWords = ["🖕"];
 
 const userMessageHistory = new Map();
@@ -265,6 +268,7 @@ client.on("messageCreate", (message) => {
       voiceChannel.permissionOverwrites
         .edit(mentionedUser, { Speak: false })
         .then(() => mentionedUser.voice.setChannel(null))
+        .then(() => delay(1000))
         .then(() => mentionedUser.voice.setChannel(currentChannel))
         .then(() => {
           message.reply(
@@ -340,6 +344,7 @@ client.on("messageCreate", (message) => {
       voiceChannel.permissionOverwrites
         .edit(mentionedUser, { Speak: true })
         .then(() => mentionedUser.voice.setChannel(null))
+        .then(() => delay(1000))
         .then(() => mentionedUser.voice.setChannel(currentChannel))
         .then(() => {
           message.reply(
