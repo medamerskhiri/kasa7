@@ -19,6 +19,14 @@ function normalize(str) {
     .replace(/(.)\1+/g, "$1");
 }
 
+function parseRoomName(messageContent) {
+  const withQuotes = messageContent.match(/"(.+?)"/);
+  if (withQuotes) return withQuotes[1].trim().toLowerCase();
+  const withoutQuotes = messageContent.match(/(?:vr|chat)\s+(.+)/i);
+  if (withoutQuotes) return withoutQuotes[1].trim().toLowerCase();
+  return null;
+}
+
 const cooldowns = new Map();
 const COOLDOWN = 30 * 1000;
 
@@ -137,21 +145,17 @@ const HISTORY_WINDOW = 10 * 1000;
 
 function getRecentMessages(userId, newMessage) {
   const now = Date.now();
-
   if (!userMessageHistory.has(userId)) {
     userMessageHistory.set(userId, []);
   }
-
   const history = userMessageHistory.get(userId);
   history.push({
     message: newMessage,
     content: newMessage.content.toLowerCase(),
     time: now,
   });
-
   const recent = history.filter((m) => now - m.time < HISTORY_WINDOW);
   userMessageHistory.set(userId, recent);
-
   return recent;
 }
 
@@ -229,24 +233,23 @@ client.on("messageCreate", (message) => {
 
     const mentionedUser = message.mentions.members.first();
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
-    const roomMatch = message.content.match(/"(.+?)"/);
+    const roomName = parseRoomName(message.content);
 
-    if (!mentionedUser || !typeMatch || !roomMatch) {
+    if (!mentionedUser || !typeMatch || !roomName) {
       message.reply(
-        'usage: `!sakket @user vr "room name"` or `!sakket @user chat "room name"`'
+        "usage: `!sakket @user vr room name` or `!sakket @user chat room name`"
       );
       return;
     }
 
     const type = typeMatch[1].toLowerCase();
-    const roomName = roomMatch[1].toLowerCase();
 
     if (type === "vr") {
       const voiceChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
       );
       if (!voiceChannel) {
-        message.reply(`ma l9ithach lvoice room li esmha "**${roomMatch[1]}**"`);
+        message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
         return;
       }
       voiceChannel.permissionOverwrites
@@ -256,7 +259,8 @@ client.on("messageCreate", (message) => {
             `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
           );
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error(err);
           message.reply("manajjamtech nsakktou , check bot permissions .");
         });
     } else if (type === "chat") {
@@ -264,7 +268,7 @@ client.on("messageCreate", (message) => {
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
       );
       if (!textChannel) {
-        message.reply(`ma l9ithach echat room li esmha "**${roomMatch[1]}**"`);
+        message.reply(`ma l9ithach echat room li esmha "**${roomName}**"`);
         return;
       }
       textChannel.permissionOverwrites
@@ -274,7 +278,8 @@ client.on("messageCreate", (message) => {
             `✅ ${mentionedUser} saket fi **${textChannel.name}** 🔇`
           );
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error(err);
           message.reply("manajjamtech nsakktou , check bot permissions .");
         });
     }
@@ -296,24 +301,23 @@ client.on("messageCreate", (message) => {
 
     const mentionedUser = message.mentions.members.first();
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
-    const roomMatch = message.content.match(/"(.+?)"/);
+    const roomName = parseRoomName(message.content);
 
-    if (!mentionedUser || !typeMatch || !roomMatch) {
+    if (!mentionedUser || !typeMatch || !roomName) {
       message.reply(
-        'usage: `!na77i_mute @user vr "room name"` or `!na77i_mute @user chat "room name"`'
+        "usage: `!na77i_mute @user vr room name` or `!na77i_mute @user chat room name`"
       );
       return;
     }
 
     const type = typeMatch[1].toLowerCase();
-    const roomName = roomMatch[1].toLowerCase();
 
     if (type === "vr") {
       const voiceChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
       );
       if (!voiceChannel) {
-        message.reply(`ma l9ithach lvoice room li esmha "**${roomMatch[1]}**"`);
+        message.reply(`ma l9ithach lvoice room li esmha "**${roomName}**"`);
         return;
       }
       voiceChannel.permissionOverwrites
@@ -323,7 +327,8 @@ client.on("messageCreate", (message) => {
             `✅ ${mentionedUser} tna77alou lmute fi **${voiceChannel.name}** 🔊`
           );
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error(err);
           message.reply("manajjamtech enna7i mute , check bot permissions .");
         });
     } else if (type === "chat") {
@@ -331,7 +336,7 @@ client.on("messageCreate", (message) => {
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 0
       );
       if (!textChannel) {
-        message.reply(`ma l9ithach echat room li esmha "**${roomMatch[1]}**"`);
+        message.reply(`ma l9ithach echat room li esmha "**${roomName}**"`);
         return;
       }
       textChannel.permissionOverwrites
@@ -341,7 +346,8 @@ client.on("messageCreate", (message) => {
             `✅ ${mentionedUser} tna77alou lmute fi **${textChannel.name}** 🔊`
           );
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error(err);
           message.reply("manajjamtech enna7i mute , check bot permissions .");
         });
     }
