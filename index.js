@@ -187,10 +187,16 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
+
+  // ✅ check forwarded message content too
+  const forwardedContent =
+    message.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const allContent = content + " " + forwardedContent;
+
   const recentMessages = getRecentMessages(message.author.id, message);
 
-  // 1. bad word check
-  if (isBadMessage(content, message.author.id)) {
+  // 1. bad word check (includes forwarded content)
+  if (isBadMessage(allContent, message.author.id)) {
     recentMessages.forEach((m) => m.message.delete().catch(() => {}));
     userMessageHistory.set(message.author.id, []);
     message.channel
@@ -422,11 +428,14 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
   if (!newMessage.content) return;
 
   const content = newMessage.content.toLowerCase();
-  const normalized = normalize(content);
+  const forwardedContent =
+    newMessage.messageSnapshots?.first()?.content?.toLowerCase() || "";
+  const allContent = content + " " + forwardedContent;
+  const normalized = normalize(allContent);
 
   if (
     badWords.some((w) => normalized.includes(w)) ||
-    emojiWords.some((e) => content.includes(e))
+    emojiWords.some((e) => allContent.includes(e))
   ) {
     newMessage.delete().catch(() => {});
     newMessage.channel
