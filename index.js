@@ -37,8 +37,55 @@ function getForwardedContent(message) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const ALLOWED_ROLE_ID = "1483121682695590069";
+
+const features = {
+  badwords: true,
+  spam: true,
+  triggers: true,
+  welcome: true,
+  mentions: true,
+};
+
 const cooldowns = new Map();
 const COOLDOWN = 30 * 1000;
+
+const spamHistory = new Map();
+const SPAM_WINDOW = 10 * 1000; // 10 seconds
+const SPAM_LIMIT = 5; // max 5 messages in 10 sec
+const REPEAT_LIMIT = 3; // max 3 same messages
+const MENTION_LIMIT = 3; // max 3 mentions
+
+function checkSpam(userId, normalizedContent, message) {
+  const now = Date.now();
+  if (!spamHistory.has(userId)) {
+    spamHistory.set(userId, []);
+  }
+  const history = spamHistory.get(userId);
+  history.push({
+    content: normalizedContent,
+    time: now,
+    message: message,
+    mentions: message.mentions.users.size,
+  });
+  const recent = history.filter((m) => now - m.time < SPAM_WINDOW);
+  spamHistory.set(userId, recent);
+
+  // too many messages too fast
+  if (recent.length > SPAM_LIMIT) return { spam: true };
+
+  // same message repeated
+  const repeatCount = recent.filter(
+    (m) => m.content === normalizedContent
+  ).length;
+  if (repeatCount > REPEAT_LIMIT) return { spam: true };
+
+  // too many mentions
+  const totalMentions = recent.reduce((sum, m) => sum + m.mentions, 0);
+  if (totalMentions > MENTION_LIMIT) return { spam: true };
+
+  return { spam: false };
+}
 
 const triggers = [
   {
@@ -193,17 +240,50 @@ function isBadMessage(content, userId) {
   );
 }
 
+function hasPermission(member) {
+  return member.roles.cache.has(ALLOWED_ROLE_ID);
+}
+
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.toLowerCase();
   const forwardedContent = getForwardedContent(message);
   const allContent = content + " " + forwardedContent;
+  const normalizedContent = normalize(allContent);
 
   const recentMessages = getRecentMessages(message.author.id, message);
 
+  // 0. toggle command
+  if (content.startsWith("!toggle")) {
+    if (!hasPermission(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+
+    const feature = content.split(" ")[1];
+    if (!feature || !Object.prototype.hasOwnProperty.call(features, feature)) {
+      message.reply(
+        `features available: \`badwords\` , \`spam\` , \`triggers\` , \`welcome\` , \`mentions\`\n` +
+          `current status:\n` +
+          Object.entries(features)
+            .map(([k, v]) => `• **${k}**: ${v ? "🟢 on" : "🔴 off"}`)
+            .join("\n")
+      );
+      return;
+    }
+
+    features[feature] = !features[feature];
+    message.reply(
+      `✅ **${feature}** is now ${features[feature] ? "🟢 on" : "🔴 off"}`
+    );
+    return;
+  }
+
   // 1. bad word check
-  if (isBadMessage(allContent, message.author.id)) {
+  if (features.badwords && isBadMessage(allContent, message.author.id)) {
     recentMessages.forEach((m) => m.message.delete().catch(() => {}));
     userMessageHistory.set(message.author.id, []);
     message.channel
@@ -216,13 +296,27 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 2. clear command
+  // 2. spam check
+  if (features.spam) {
+    const spamResult = checkSpam(message.author.id, normalizedContent, message);
+    if (spamResult.spam) {
+      const recentSpam = spamHistory.get(message.author.id) || [];
+      // ✅ keep first message, delete the rest
+      recentSpam.slice(1).forEach((m) => m.message.delete().catch(() => {}));
+      spamHistory.set(message.author.id, []);
+      userMessageHistory.set(message.author.id, []);
+      message.channel
+        .send(`${message.author}, yezzi bla spam , takel ban rak .`)
+        .then((msg) => {
+          setTimeout(() => msg.delete(), 5000);
+        });
+      return;
+    }
+  }
+
+  // 3. clear command
   if (content === "!fassa5") {
-    const allowedRole = "a7la nes";
-    const hasRole = message.member.roles.cache.some(
-      (r) => r.name.toLowerCase() === allowedRole
-    );
-    if (!hasRole) {
+    if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
         setTimeout(() => msg.delete(), 3000);
       });
@@ -241,13 +335,9 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 3. sakket command (mute)
+  // 4. sakket command (mute)
   if (content.startsWith("!sakket")) {
-    const allowedRole = "a7la nes";
-    const hasRole = message.member.roles.cache.some(
-      (r) => r.name.toLowerCase() === allowedRole
-    );
-    if (!hasRole) {
+    if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
         setTimeout(() => msg.delete(), 3000);
       });
@@ -284,9 +374,7 @@ client.on("messageCreate", async (message) => {
         (ch) => ch.name.toLowerCase() === "mute-reload" && ch.type === 2
       );
       if (!reloadChannel) {
-        message.reply(
-          `ma l9ithach channel "mute-reload" , a3melou fi server !`
-        );
+        message.reply(`ma l9ithach channel "mute-reload" , zidha fi server !`);
         return;
       }
       const currentChannel = freshMember.voice.channel;
@@ -327,13 +415,9 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 4. na77i_mute command (unmute)
+  // 5. na77i_mute command (unmute)
   if (content.startsWith("!na77i_mute")) {
-    const allowedRole = "a7la nes";
-    const hasRole = message.member.roles.cache.some(
-      (r) => r.name.toLowerCase() === allowedRole
-    );
-    if (!hasRole) {
+    if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
         setTimeout(() => msg.delete(), 3000);
       });
@@ -370,9 +454,7 @@ client.on("messageCreate", async (message) => {
         (ch) => ch.name.toLowerCase() === "mute-reload" && ch.type === 2
       );
       if (!reloadChannel) {
-        message.reply(
-          `ma l9ithach channel "mute-reload" , a3melou fi server !`
-        );
+        message.reply(`ma l9ithach channel "mute-reload" , zidha fi server !`);
         return;
       }
       const currentChannel = freshMember.voice.channel;
@@ -413,8 +495,8 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 5. mention logic
-  if (message.mentions.has(client.user)) {
+  // 6. mention logic
+  if (features.mentions && message.mentions.has(client.user)) {
     const userId = message.author.id;
     const now = Date.now();
 
@@ -425,12 +507,12 @@ client.on("messageCreate", async (message) => {
       if (data.count === 1) {
         message.reply(`aa si ${message.author}, chet7eb ?`);
       } else if (data.count === 2) {
-        message.reply(`chet7eb ${message.author} ma tkarreznich`);
+        message.reply(`chet7eb ${message.author} ma twattarlich a3sabi`);
       } else {
         message.reply(
           `aa si ${message.author}, 5aterni ka7louch te7sayebini ma9mou3 hw chentaffik .`
         );
-        message.reply(`${message.author}, barra nayek`);
+        message.reply(`${message.author}, barra zammer`);
       }
 
       data.count += 1;
@@ -442,15 +524,20 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 6. keyword triggers
-  const match = triggers.find((t) => t.words.some((w) => content.includes(w)));
-  if (match) message.reply(match.reply);
+  // 7. keyword triggers
+  if (features.triggers) {
+    const match = triggers.find((t) =>
+      t.words.some((w) => content.includes(w))
+    );
+    if (match) message.reply(match.reply);
+  }
 });
 
-// 7. catch edited messages
+// 8. catch edited messages
 client.on("messageUpdate", (oldMessage, newMessage) => {
   if (newMessage.author?.bot) return;
   if (!newMessage.content) return;
+  if (!features.badwords) return;
 
   const content = newMessage.content.toLowerCase();
   const forwardedContent = getForwardedContent(newMessage);
@@ -473,6 +560,8 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
 });
 
 client.on("guildMemberAdd", (member) => {
+  if (!features.welcome) return;
+
   const channel = member.guild.channels.cache.find(
     (ch) => ch.name === "welcome"
   );
