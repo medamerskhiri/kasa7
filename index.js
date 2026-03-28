@@ -312,15 +312,21 @@ client.on("messageCreate", async (message) => {
   incrementMessages(message.guild.id, message.author.id);
 
   // 3. clear command
-  if (content === "!fassa5") {
+  if (content === "!fassa5" || content.startsWith("!fassa5 ")) {
     if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
         setTimeout(() => msg.delete(), 3000);
       });
       return;
     }
+    const args = content.split(" ");
+    const amount = parseInt(args[1]) || 100;
+    if (amount < 1 || amount > 100) {
+      message.reply("el nombre lazem ykon bin 1 w 100 .");
+      return;
+    }
     message.channel
-      .bulkDelete(100, true)
+      .bulkDelete(amount, true)
       .then((deleted) => {
         message.channel
           .send(`✅ hani fassa5t ${deleted.size} messages .`)
@@ -427,7 +433,6 @@ client.on("messageCreate", async (message) => {
         await freshMember.voice.setChannel(reloadChannel);
         await delay(1500);
         await freshMember.voice.setChannel(currentChannel);
-        // ✅ save mute to db
         addMute(
           message.guild.id,
           mentionedUser.id,
@@ -454,7 +459,6 @@ client.on("messageCreate", async (message) => {
         await textChannel.permissionOverwrites.edit(mentionedUser, {
           SendMessages: false,
         });
-        // ✅ save mute to db
         addMute(
           message.guild.id,
           mentionedUser.id,
@@ -619,7 +623,6 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
 
 // 11. welcome + save join date
 client.on("guildMemberAdd", (member) => {
-  // ✅ save join date
   setJoinDate(member.guild.id, member.user.id, new Date().toISOString());
 
   if (!features.welcome) return;
