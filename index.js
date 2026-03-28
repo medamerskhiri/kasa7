@@ -1,5 +1,13 @@
 require("dotenv").config();
 const { Client, GatewayIntentBits } = require("discord.js");
+const {
+  getUser,
+  addWarn,
+  addMute,
+  addBan,
+  incrementMessages,
+  setJoinDate,
+} = require("./db");
 
 console.log("Starting bot...");
 
@@ -51,10 +59,10 @@ const cooldowns = new Map();
 const COOLDOWN = 30 * 1000;
 
 const spamHistory = new Map();
-const SPAM_WINDOW = 10 * 1000; // 10 seconds
-const SPAM_LIMIT = 5; // max 5 messages in 10 sec
-const REPEAT_LIMIT = 3; // max 3 same messages
-const MENTION_LIMIT = 3; // max 3 mentions
+const SPAM_WINDOW = 10 * 1000;
+const SPAM_LIMIT = 5;
+const REPEAT_LIMIT = 3;
+const MENTION_LIMIT = 3;
 
 function checkSpam(userId, normalizedContent, message) {
   const now = Date.now();
@@ -70,20 +78,13 @@ function checkSpam(userId, normalizedContent, message) {
   });
   const recent = history.filter((m) => now - m.time < SPAM_WINDOW);
   spamHistory.set(userId, recent);
-
-  // too many messages too fast
   if (recent.length > SPAM_LIMIT) return { spam: true };
-
-  // same message repeated
   const repeatCount = recent.filter(
     (m) => m.content === normalizedContent
   ).length;
   if (repeatCount > REPEAT_LIMIT) return { spam: true };
-
-  // too many mentions
   const totalMentions = recent.reduce((sum, m) => sum + m.mentions, 0);
   if (totalMentions > MENTION_LIMIT) return { spam: true };
-
   return { spam: false };
 }
 
@@ -216,11 +217,7 @@ function getRecentMessages(userId, newMessage) {
   const history = userMessageHistory.get(userId);
   const forwardedContent = getForwardedContent(newMessage);
   const fullContent = newMessage.content.toLowerCase() + " " + forwardedContent;
-  history.push({
-    message: newMessage,
-    content: fullContent,
-    time: now,
-  });
+  history.push({ message: newMessage, content: fullContent, time: now });
   const recent = history.filter((m) => now - m.time < HISTORY_WINDOW);
   userMessageHistory.set(userId, recent);
   return recent;
@@ -262,7 +259,6 @@ client.on("messageCreate", async (message) => {
       });
       return;
     }
-
     const feature = content.split(" ")[1];
     if (!feature || !Object.prototype.hasOwnProperty.call(features, feature)) {
       message.reply(
@@ -274,7 +270,6 @@ client.on("messageCreate", async (message) => {
       );
       return;
     }
-
     features[feature] = !features[feature];
     message.reply(
       `✅ **${feature}** is now ${features[feature] ? "🟢 on" : "🔴 off"}`
@@ -301,7 +296,6 @@ client.on("messageCreate", async (message) => {
     const spamResult = checkSpam(message.author.id, normalizedContent, message);
     if (spamResult.spam) {
       const recentSpam = spamHistory.get(message.author.id) || [];
-      // ✅ keep first message, delete the rest
       recentSpam.slice(1).forEach((m) => m.message.delete().catch(() => {}));
       spamHistory.set(message.author.id, []);
       userMessageHistory.set(message.author.id, []);
@@ -313,6 +307,9 @@ client.on("messageCreate", async (message) => {
       return;
     }
   }
+
+  // ✅ track message count
+  incrementMessages(message.guild.id, message.author.id);
 
   // 3. clear command
   if (content === "!fassa5") {
@@ -335,7 +332,52 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 4. sakket command (mute)
+  // 4. warn command
+  if (content.startsWith("!warn")) {
+    if (!hasPermission(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const mentionedUser = message.mentions.members.first();
+    const reason = message.content.split(" ").slice(2).join(" ") || "no reason";
+    if (!mentionedUser) {
+      message.reply("usage: `!warn @user reason`");
+      return;
+    }
+    const warnCount = addWarn(
+      message.guild.id,
+      mentionedUser.id,
+      reason,
+      message.author.id
+    );
+    message.reply(
+      `⚠️ ${mentionedUser} t3andou warn , total warns: **${warnCount}**`
+    );
+    return;
+  }
+
+  // 5. profile command
+  if (content.startsWith("!profile")) {
+    const mentionedUser = message.mentions.members.first() || message.member;
+    const userData = getUser(message.guild.id, mentionedUser.id);
+    message.reply(
+      `👤 **${mentionedUser.user.username}**\n` +
+        `📅 Join date: ${
+          userData.joinDate
+            ? new Date(userData.joinDate).toLocaleDateString()
+            : "unknown"
+        }\n` +
+        `💬 Messages: **${userData.messageCount}**\n` +
+        `⚠️ Warns: **${userData.warns.length}**\n` +
+        `🔇 Mutes: **${userData.mutes.length}**\n` +
+        `🔨 Bans: **${userData.bans.length}**`
+    );
+    return;
+  }
+
+  // 6. sakket command (mute)
   if (content.startsWith("!sakket")) {
     if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
@@ -385,6 +427,14 @@ client.on("messageCreate", async (message) => {
         await freshMember.voice.setChannel(reloadChannel);
         await delay(1500);
         await freshMember.voice.setChannel(currentChannel);
+        // ✅ save mute to db
+        addMute(
+          message.guild.id,
+          mentionedUser.id,
+          "muted by moderator",
+          message.author.id,
+          "vr"
+        );
         message.reply(
           `✅ ${mentionedUser} saket fi **${voiceChannel.name}** 🔇`
         );
@@ -404,6 +454,14 @@ client.on("messageCreate", async (message) => {
         await textChannel.permissionOverwrites.edit(mentionedUser, {
           SendMessages: false,
         });
+        // ✅ save mute to db
+        addMute(
+          message.guild.id,
+          mentionedUser.id,
+          "muted by moderator",
+          message.author.id,
+          "chat"
+        );
         message.reply(
           `✅ ${mentionedUser} saket fi **${textChannel.name}** 🔇`
         );
@@ -415,7 +473,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 5. na77i_mute command (unmute)
+  // 7. na77i_mute command (unmute)
   if (content.startsWith("!na77i_mute")) {
     if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
@@ -495,7 +553,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 6. mention logic
+  // 8. mention logic
   if (features.mentions && message.mentions.has(client.user)) {
     const userId = message.author.id;
     const now = Date.now();
@@ -524,7 +582,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 7. keyword triggers
+  // 9. keyword triggers
   if (features.triggers) {
     const match = triggers.find((t) =>
       t.words.some((w) => content.includes(w))
@@ -533,7 +591,7 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// 8. catch edited messages
+// 10. catch edited messages
 client.on("messageUpdate", (oldMessage, newMessage) => {
   if (newMessage.author?.bot) return;
   if (!newMessage.content) return;
@@ -559,7 +617,11 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
   }
 });
 
+// 11. welcome + save join date
 client.on("guildMemberAdd", (member) => {
+  // ✅ save join date
+  setJoinDate(member.guild.id, member.user.id, new Date().toISOString());
+
   if (!features.welcome) return;
 
   const channel = member.guild.channels.cache.find(
