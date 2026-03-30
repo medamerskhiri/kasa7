@@ -74,11 +74,34 @@ function setJoinDate(guildId, userId, date) {
   }
 }
 
+function getAllowedRoles(guildId) {
+  const db = loadDB();
+  if (!db[`roles_${guildId}`] || db[`roles_${guildId}`].length === 0) {
+    db[`roles_${guildId}`] = ["1483121682695590069"];
+    saveDB(db);
+  }
+  // ✅ always make sure owner role is in the list
+  if (!db[`roles_${guildId}`].includes("1483121682695590069")) {
+    db[`roles_${guildId}`].unshift("1483121682695590069");
+    saveDB(db);
+  }
+  return db[`roles_${guildId}`];
+}
+
+function saveAllowedRoles(guildId, roles) {
+  const db = loadDB();
+  db[`roles_${guildId}`] = roles;
+  saveDB(db);
+}
+
 module.exports = {
   getUser,
+  saveUser,
   addWarn,
   addMute,
   addBan,
   incrementMessages,
   setJoinDate,
+  getAllowedRoles,
+  saveAllowedRoles,
 };

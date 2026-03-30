@@ -76,7 +76,7 @@ async function showVoteResults(channel, msgId, question, choices, emojis) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const OWNER_ROLE_ID = "1483121682695590069"; // only this role can add/remove roles
+const OWNER_ROLE_ID = "1483121682695590069";
 
 const features = {
   badwords: true,
@@ -267,8 +267,13 @@ function isBadMessage(content, userId) {
 }
 
 function hasPermission(member) {
-  const roles = getAllowedRoles(member.guild.id);
-  return roles.some((id) => member.roles.cache.has(id));
+  try {
+    const roles = getAllowedRoles(member.guild.id);
+    return roles.some((id) => member.roles.cache.has(id));
+  } catch (err) {
+    console.error("hasPermission error:", err);
+    return member.roles.cache.has(OWNER_ROLE_ID);
+  }
 }
 
 function isOwner(member) {
