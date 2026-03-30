@@ -7,6 +7,8 @@ const {
   addBan,
   incrementMessages,
   setJoinDate,
+  getAllowedRoles,
+  saveAllowedRoles,
 } = require("./db");
 
 console.log("Starting bot...");
@@ -43,9 +45,38 @@ function getForwardedContent(message) {
     : "";
 }
 
+async function showVoteResults(channel, msgId, question, choices, emojis) {
+  const fetchedMsg = await channel.messages.fetch(msgId).catch(() => null);
+  if (!fetchedMsg) return;
+
+  const results = choices.map((choice, i) => {
+    const reaction = fetchedMsg.reactions.cache.get(emojis[i]);
+    const count = (reaction ? reaction.count : 1) - 1;
+    return { choice, count, emoji: emojis[i] };
+  });
+
+  const total = results.reduce((sum, r) => sum + r.count, 0);
+  const winner = results.reduce((a, b) => (a.count > b.count ? a : b));
+
+  const resultText =
+    `📊 **${question}** — natija:\n\n` +
+    results
+      .map((r) => {
+        const percent = total > 0 ? Math.round((r.count / total) * 100) : 0;
+        const bar =
+          "█".repeat(Math.round(percent / 10)) +
+          "░".repeat(10 - Math.round(percent / 10));
+        return `${r.emoji} **${r.choice}** — ${r.count} votes (${percent}%)\n${bar}`;
+      })
+      .join("\n\n") +
+    `\n\n🏆 ** l9arar erraba7: ${winner.choice}** b ${winner.count} votes !`;
+
+  channel.send(resultText);
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const ALLOWED_ROLE_ID = "1483121682695590069";
+const OWNER_ROLE_ID = "1483121682695590069"; // only this role can add/remove roles
 
 const features = {
   badwords: true,
@@ -64,27 +95,27 @@ const SPAM_LIMIT = 5;
 const REPEAT_LIMIT = 3;
 const MENTION_LIMIT = 3;
 
+const activeVotes = new Map();
+
 function checkSpam(userId, normalizedContent, message) {
   const now = Date.now();
-  if (!spamHistory.has(userId)) {
-    spamHistory.set(userId, []);
-  }
+  if (!spamHistory.has(userId)) spamHistory.set(userId, []);
   const history = spamHistory.get(userId);
   history.push({
     content: normalizedContent,
     time: now,
-    message: message,
+    message,
     mentions: message.mentions.users.size,
   });
   const recent = history.filter((m) => now - m.time < SPAM_WINDOW);
   spamHistory.set(userId, recent);
   if (recent.length > SPAM_LIMIT) return { spam: true };
-  const repeatCount = recent.filter(
-    (m) => m.content === normalizedContent
-  ).length;
-  if (repeatCount > REPEAT_LIMIT) return { spam: true };
-  const totalMentions = recent.reduce((sum, m) => sum + m.mentions, 0);
-  if (totalMentions > MENTION_LIMIT) return { spam: true };
+  if (
+    recent.filter((m) => m.content === normalizedContent).length > REPEAT_LIMIT
+  )
+    return { spam: true };
+  if (recent.reduce((sum, m) => sum + m.mentions, 0) > MENTION_LIMIT)
+    return { spam: true };
   return { spam: false };
 }
 
@@ -211,9 +242,7 @@ const HISTORY_WINDOW = 10 * 1000;
 
 function getRecentMessages(userId, newMessage) {
   const now = Date.now();
-  if (!userMessageHistory.has(userId)) {
-    userMessageHistory.set(userId, []);
-  }
+  if (!userMessageHistory.has(userId)) userMessageHistory.set(userId, []);
   const history = userMessageHistory.get(userId);
   const forwardedContent = getForwardedContent(newMessage);
   const fullContent = newMessage.content.toLowerCase() + " " + forwardedContent;
@@ -238,7 +267,12 @@ function isBadMessage(content, userId) {
 }
 
 function hasPermission(member) {
-  return member.roles.cache.has(ALLOWED_ROLE_ID);
+  const roles = getAllowedRoles(member.guild.id);
+  return roles.some((id) => member.roles.cache.has(id));
+}
+
+function isOwner(member) {
+  return member.roles.cache.has(OWNER_ROLE_ID);
 }
 
 client.on("messageCreate", async (message) => {
@@ -248,7 +282,6 @@ client.on("messageCreate", async (message) => {
   const forwardedContent = getForwardedContent(message);
   const allContent = content + " " + forwardedContent;
   const normalizedContent = normalize(allContent);
-
   const recentMessages = getRecentMessages(message.author.id, message);
 
   // 0. toggle command
@@ -308,7 +341,7 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // ✅ track message count
+  // track message count
   incrementMessages(message.guild.id, message.author.id);
 
   // 3. clear command
@@ -383,7 +416,172 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 6. sakket command (mute)
+  // 6. addrole command
+  if (content.startsWith("!addrole")) {
+    if (!isOwner(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const roleId = content.split(" ")[1];
+    const roles = getAllowedRoles(message.guild.id);
+    if (!roleId) {
+      message.reply(
+        `usage: \`!addrole roleID\`\ncurrent allowed roles:\n` +
+          roles
+            .map((id, i) => `• \`${id}\`${i === 0 ? " (owner)" : ""}`)
+            .join("\n")
+      );
+      return;
+    }
+    if (roles.includes(roleId)) {
+      message.reply("hadha erole deja fe lista .");
+      return;
+    }
+    roles.push(roleId);
+    saveAllowedRoles(message.guild.id, roles);
+    message.reply(`✅ role \`${roleId}\` tzad fe lista .`);
+    return;
+  }
+
+  // 7. removerole command
+  if (content.startsWith("!removerole")) {
+    if (!isOwner(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const roleId = content.split(" ")[1];
+    const roles = getAllowedRoles(message.guild.id);
+    if (!roleId) {
+      message.reply(
+        `usage: \`!removerole roleID\`\ncurrent allowed roles:\n` +
+          roles
+            .map((id, i) => `• \`${id}\`${i === 0 ? " (owner)" : ""}`)
+            .join("\n")
+      );
+      return;
+    }
+    if (roleId === OWNER_ROLE_ID) {
+      message.reply("ma tnajem tna7i el owner role .");
+      return;
+    }
+    const index = roles.indexOf(roleId);
+    if (index === -1) {
+      message.reply("had role mach fi lista .");
+      return;
+    }
+    roles.splice(index, 1);
+    saveAllowedRoles(message.guild.id, roles);
+    message.reply(`✅ role \`${roleId}\` tna7a men lista .`);
+    return;
+  }
+
+  // 8. listroles command
+  if (content === "!listroles") {
+    if (!hasPermission(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const roles = getAllowedRoles(message.guild.id);
+    message.reply(
+      `current allowed roles:\n` +
+        roles
+          .map((id, i) => `• \`${id}\`${i === 0 ? " (owner)" : ""}`)
+          .join("\n")
+    );
+    return;
+  }
+
+  // 9. vote command
+  if (content.startsWith("!vote")) {
+    if (!hasPermission(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const args = message.content.match(/"([^"]+)"/g);
+    const timeMatch = message.content.match(/!vote\s+(\d+)(s|m|h|d)/i);
+    if (!args || args.length < 3 || !timeMatch) {
+      message.reply(
+        'usage: `!vote <time> "question" "choice1" "choice2" ...`\n' +
+          "time format: `30s` = 30 sec , `10m` = 10 min , `2h` = 2 hours , `1d` = 1 day\n" +
+          'example: `!vote 10m "winner?" "option 1" "option 2" "option 3"`\n' +
+          "max 5 choices , max 24h ."
+      );
+      return;
+    }
+    const timeValue = parseInt(timeMatch[1]);
+    const timeUnit = timeMatch[2].toLowerCase();
+    const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
+    const duration = Math.min(timeValue * multipliers[timeUnit], 86400);
+    const durationLabel = `${timeValue}${timeUnit}`;
+    const question = args[0].replace(/"/g, "");
+    const choices = args
+      .slice(1)
+      .map((a) => a.replace(/"/g, ""))
+      .slice(0, 5);
+    const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];
+    const voteText =
+      `📊 **${question}**\n\n` +
+      choices.map((c, i) => `${emojis[i]} ${c}`).join("\n") +
+      `\n\n⏱️ tatla3 natijet lvote fi **${durationLabel}** .\n` +
+      `(moderator ynajem ywa99ef lvote b \`!stopvote\`)`;
+    const voteMsg = await message.channel.send(voteText);
+    for (let i = 0; i < choices.length; i++) {
+      await voteMsg.react(emojis[i]);
+    }
+    const timer = setTimeout(async () => {
+      await showVoteResults(
+        message.channel,
+        voteMsg.id,
+        question,
+        choices,
+        emojis
+      );
+      activeVotes.delete(message.channel.id);
+    }, duration * 1000);
+    activeVotes.set(message.channel.id, {
+      msgId: voteMsg.id,
+      question,
+      choices,
+      emojis,
+      timer,
+    });
+    return;
+  }
+
+  // 10. stopvote command
+  if (content === "!stopvote") {
+    if (!hasPermission(message.member)) {
+      message.reply("ma3andekch permission !").then((msg) => {
+        setTimeout(() => msg.delete(), 3000);
+      });
+      return;
+    }
+    const vote = activeVotes.get(message.channel.id);
+    if (!vote) {
+      message.reply("dja fammach taswit hna .");
+      return;
+    }
+    clearTimeout(vote.timer);
+    activeVotes.delete(message.channel.id);
+    await showVoteResults(
+      message.channel,
+      vote.msgId,
+      vote.question,
+      vote.choices,
+      vote.emojis
+    );
+    return;
+  }
+
+  // 11. sakket command (mute)
   if (content.startsWith("!sakket")) {
     if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
@@ -391,20 +589,16 @@ client.on("messageCreate", async (message) => {
       });
       return;
     }
-
     const mentionedUser = message.mentions.members.first();
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
     const roomName = parseRoomName(message.content);
-
     if (!mentionedUser || !typeMatch || !roomName) {
       message.reply(
         "usage: `!sakket @user vr room name` or `!sakket @user chat room name`"
       );
       return;
     }
-
     const type = typeMatch[1].toLowerCase();
-
     if (type === "vr") {
       const voiceChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
@@ -477,7 +671,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 7. na77i_mute command (unmute)
+  // 12. na77i_mute command (unmute)
   if (content.startsWith("!na77i_mute")) {
     if (!hasPermission(message.member)) {
       message.reply("ma3andekch permission !").then((msg) => {
@@ -485,20 +679,16 @@ client.on("messageCreate", async (message) => {
       });
       return;
     }
-
     const mentionedUser = message.mentions.members.first();
     const typeMatch = message.content.match(/\b(vr|chat)\b/i);
     const roomName = parseRoomName(message.content);
-
     if (!mentionedUser || !typeMatch || !roomName) {
       message.reply(
         "usage: `!na77i_mute @user vr room name` or `!na77i_mute @user chat room name`"
       );
       return;
     }
-
     const type = typeMatch[1].toLowerCase();
-
     if (type === "vr") {
       const voiceChannel = message.guild.channels.cache.find(
         (ch) => ch.name.toLowerCase() === roomName && ch.type === 2
@@ -557,15 +747,13 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 8. mention logic
+  // 13. mention logic
   if (features.mentions && message.mentions.has(client.user)) {
     const userId = message.author.id;
     const now = Date.now();
-
     if (cooldowns.has(userId)) {
       const data = cooldowns.get(userId);
       data.lastTime = now;
-
       if (data.count === 1) {
         message.reply(`aa si ${message.author}, chet7eb ?`);
       } else if (data.count === 2) {
@@ -576,7 +764,6 @@ client.on("messageCreate", async (message) => {
         );
         message.reply(`${message.author}, barra zammer`);
       }
-
       data.count += 1;
       cooldowns.set(userId, data);
     } else {
@@ -586,7 +773,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 9. keyword triggers
+  // 14. keyword triggers
   if (features.triggers) {
     const match = triggers.find((t) =>
       t.words.some((w) => content.includes(w))
@@ -595,17 +782,15 @@ client.on("messageCreate", async (message) => {
   }
 });
 
-// 10. catch edited messages
+// 15. catch edited messages
 client.on("messageUpdate", (oldMessage, newMessage) => {
   if (newMessage.author?.bot) return;
   if (!newMessage.content) return;
   if (!features.badwords) return;
-
   const content = newMessage.content.toLowerCase();
   const forwardedContent = getForwardedContent(newMessage);
   const allContent = content + " " + forwardedContent;
   const normalized = normalize(allContent);
-
   if (
     badWords.some((w) => normalized.includes(w)) ||
     emojiWords.some((e) => allContent.includes(e))
@@ -621,12 +806,10 @@ client.on("messageUpdate", (oldMessage, newMessage) => {
   }
 });
 
-// 11. welcome + save join date
+// 16. welcome + save join date
 client.on("guildMemberAdd", (member) => {
   setJoinDate(member.guild.id, member.user.id, new Date().toISOString());
-
   if (!features.welcome) return;
-
   const channel = member.guild.channels.cache.find(
     (ch) => ch.name === "welcome"
   );
@@ -634,7 +817,6 @@ client.on("guildMemberAdd", (member) => {
   channel.send(
     `ahla b ${member.user.username} , mar7ba bik fi ${member.guild.name} 🎉`
   );
-
   const role = member.guild.roles.cache.find((r) => r.name === "member");
   if (!role) return;
   member.roles.add(role).catch((err) => console.error(err));
